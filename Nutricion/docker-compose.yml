@@ -1,0 +1,74 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # Servicio de la Base de Datos MySQL
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: 22122002
+      MYSQL_DATABASE: nutri_gym
+      MYSQL_USER: root
+      MYSQL_PASSWORD: 22122002
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+      start_period: 10s
+
+  # Servicio de Ollama (para modelos de lenguaje) - Comentado porque el usuario no tiene espacio
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama # Persistencia para los modelos descargados
+  #   environment:
+  #     OLLAMA_HOST: 0.0.0.0 # Permite conexiones desde otros contenedores
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "curl -f http://localhost:11434 || exit 1"]
+  #     interval: 10s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 20s
+
+  # Servicio del Backend (Spring Boot)
+  backend:
+    build:
+      context: ./Backend/nutricion
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/nutri_gym?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: 22122002
+      # OLLAMA_API_URL: http://ollama:11434 # Commented out as ollama service is removed
+    depends_on:
+      db:
+        condition: service_healthy
+      # ollama: # Removed ollama dependency
+      #   condition: service_healthy
+
+  # Servicio del Frontend (Vite)
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80" # El frontend ahora expone el puerto 80 directamente (Nginx)
+    environment:
+      # La URL de la API del Backend, accesible desde el host local
+      # Nginx en el frontend hará el proxy a http://backend:8080
+      VITE_APP_API_URL: http://localhost:8080
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  db_data: # Volumen para datos de MySQL
+  # ollama_data: # Volumen para persistir los modelos de Ollama - Commented out as ollama service is removed
